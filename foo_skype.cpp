@@ -2,7 +2,7 @@
 
 #define COMPONENT_TITLE "Skype playing notifications"
 #define COMPONENT_DLL_NAME "foo_skype"
-#define COMPONENT_VERSION "0.1 beta 3"
+#define COMPONENT_VERSION "0.1"
 
 DECLARE_COMPONENT_VERSION(COMPONENT_TITLE, COMPONENT_VERSION, "Copyright (C) 2008 Dremora");
 
@@ -22,7 +22,7 @@ static const GUID guid_skype_cfg_paused = { 0x79b6576b, 0x9dc0, 0x4866, { 0xb2, 
 static advconfig_string_factory skype_cfg_paused("Paused", guid_skype_cfg_paused, guid_skype_cfg_branch, 2, "paused: [%artist% - ]%title%");
 
 static const GUID guid_skype_cfg_stopped = { 0x78ac024d, 0x32a3, 0x40b2, { 0x88, 0x66, 0x9b, 0x5b, 0x7b, 0x2a, 0x9f, 0xc3 } };
-static advconfig_string_factory skype_cfg_stopped("Stopped", guid_skype_cfg_stopped, guid_skype_cfg_branch, 3, COMPONENT_DLL_NAME " v" COMPONENT_VERSION);
+static advconfig_string_factory skype_cfg_stopped("Stopped", guid_skype_cfg_stopped, guid_skype_cfg_branch, 3, COMPONENT_DLL_NAME);
 
 static const GUID guid_skype_cfg_pauseoncall = { 0x6575e95f, 0x4e85, 0x46bf, { 0x81, 0xa3, 0xe6, 0xb1, 0x9e, 0x5f, 0x61, 0xc2 } };
 static advconfig_checkbox_factory_t<false> skype_cfg_pauseoncall("Pause on incoming Skype calls", guid_skype_cfg_pauseoncall, advconfig_entry::guid_branch_playback, 10, false);
@@ -35,6 +35,15 @@ enum {
 	SKYPECONTROLAPI_ATTACH_API_AVAILABLE         = 0x8001
 };
 
+void skype_connect() {
+	PostMessage(HWND_BROADCAST, GlobalSkypeControlAPIDiscoverMsg, (WPARAM)GlobalMainWindowHandle, 0);
+}
+
+void skype_disconnect() {
+	GlobalSkypeAPIWindowHandle = 0;
+	console::printf(COMPONENT_TITLE ": Disconnected.");
+}
+
 void skype_send(const char *title) {
 	if (!GlobalSkypeAPIWindowHandle) return;
 	COPYDATASTRUCT CopyData;
@@ -43,16 +52,12 @@ void skype_send(const char *title) {
 	CopyData.lpData = new char[CopyData.cbData];
 	strcpy_s((char *)CopyData.lpData, CopyData.cbData, "SET PROFILE MOOD_TEXT ");
 	strcat_s((char *)CopyData.lpData, CopyData.cbData, title);
-	if (!SendMessage(GlobalSkypeAPIWindowHandle, WM_COPYDATA, (WPARAM)GlobalMainWindowHandle, (LPARAM)&CopyData)) {
-		GlobalSkypeAPIWindowHandle = 0;
-		console::printf(COMPONENT_TITLE ": Disconnected.");
-	}
+	if (!SendMessage(GlobalSkypeAPIWindowHandle, WM_COPYDATA, (WPARAM)GlobalMainWindowHandle, (LPARAM)&CopyData)) skype_disconnect();
 	delete CopyData.lpData;
 }
 
-void skype_stopped() { 
+void skype_stopped() {
 	if (!GlobalSkypeAPIWindowHandle) return;
-	service_ptr_t<advconfig_entry_string_impl> stop;
 	pfc::string8 str;
 	skype_cfg_stopped.get_static_instance().get_state(str);
 	skype_send(str);
@@ -61,12 +66,11 @@ void skype_stopped() {
 void skype_playing() {
 	if (!GlobalSkypeAPIWindowHandle) return;
 	static_api_ptr_t<playback_control> pc;
-	static_api_ptr_t<titleformat_compiler> tc;
 	service_ptr_t<titleformat_object> script;
 	pfc::string8 str, text;
 	if (pc->is_paused()) skype_cfg_paused.get_static_instance().get_state(str);
 	else skype_cfg_playing.get_static_instance().get_state(str);
-	tc->compile_safe(script, str);
+	static_api_ptr_t<titleformat_compiler>()->compile_safe(script, str);
 	if (!pc->playback_format_title(0, text, script, 0, playback_control::display_level_titles)) {
 		skype_stopped();
 		return;
@@ -74,24 +78,25 @@ void skype_playing() {
 	skype_send(text);
 }
 
-void skype_connect() {
-	PostMessage(HWND_BROADCAST, GlobalSkypeControlAPIDiscoverMsg, (WPARAM)GlobalMainWindowHandle, 0);
-}
 static LRESULT __stdcall WindowProc(HWND hWindow, UINT uiMessage, WPARAM uiParam, LPARAM ulParam) {
 	if (uiMessage == WM_COPYDATA && GlobalSkypeAPIWindowHandle == (HWND)uiParam) {
-		if (skype_cfg_pauseoncall.get_static_instance().get_state() && *((int *)ulParam + 1) > 5 && !memcmp(*(char **)((char *)ulParam + 8), "CALL ", 5)) {
-				static_api_ptr_t<playback_control> pc;
-				pc->pause(true);
-		}
+		if (skype_cfg_pauseoncall.get_static_instance().get_state() && *((int *)ulParam + 1) >= 22 && !memcmp(*(char **)((char *)ulParam + 8), "CALL ", 5)) {
+			int size = *((int *)ulParam + 1);
+			char *str = *((char **)((char *)ulParam + 8));
+			for (int i = 5; i < size; i++) {
+				if (*(str+i) == ' ') {
+					if (!strcmp(str+i+1, "STATUS RINGING")) static_api_ptr_t<playback_control>()->pause(true);
+					break;
+				}
+			}
+		} else if (!strcmp(*(char **)((char *)ulParam + 8), "USERSTATUS LOGGEDOUT")) skype_disconnect();
 		return 1;
 	}
 	else if (uiMessage == GlobalSkypeControlAPIAttachMsg) {
 		switch (ulParam) {
-			case SKYPECONTROLAPI_ATTACH_SUCCESS:
-			{
+			case SKYPECONTROLAPI_ATTACH_SUCCESS: {
 				GlobalSkypeAPIWindowHandle = (HWND)uiParam;
-				static_api_ptr_t<playback_control> pc;
-				if (pc->is_playing()) skype_playing();
+				if (static_api_ptr_t<playback_control>()->is_playing()) skype_playing();
 				else skype_stopped();
 				console::printf(COMPONENT_TITLE ": Connection successful.");
 				break;
@@ -106,8 +111,9 @@ static LRESULT __stdcall WindowProc(HWND hWindow, UINT uiMessage, WPARAM uiParam
 				console::printf(COMPONENT_TITLE ": Skype API is not available, waiting.");
 				break;
 			case SKYPECONTROLAPI_ATTACH_API_AVAILABLE:
+				if (GlobalSkypeAPIWindowHandle) skype_disconnect();
 				console::printf(COMPONENT_TITLE ": Skype API is now available.");
-				/*if (!GlobalSkypeAPIWindowHandle) */skype_connect();
+				skype_connect();
 				break;
 		}
 		return 0;
@@ -127,9 +133,6 @@ class skype_initquit : public initquit {
 		skype_connect();
 	}
 	virtual void on_quit() {
-		//pfc::string8 str;
-		//skype_cfg_stopped.get_static_instance().get_state(str);
-		//skype_send(str);
 		UnregisterClass(WindowClassName, core_api::get_my_instance());
 	}
 };
