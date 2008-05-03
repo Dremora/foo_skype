@@ -1,18 +1,31 @@
 #include "../SDK/foobar2000.h"
 
-#define COMPONENT_TITLE "Skype now playing notifications"
-#define NOW_PLAYING_TEXT "Now playing: [%artist% - ]%title%"
-#define PAUSED_TEXT "Paused: [%artist% - ]%title%"
-#define STOPPED_TEXT "Stopped."
-#define FB2K_NOT_STARTED "foobar2000 is not started."
+#define COMPONENT_TITLE "Skype playing notifications"
+#define COMPONENT_DLL_NAME "foo_skype"
+#define COMPONENT_VERSION "0.1 beta 2"
 
-DECLARE_COMPONENT_VERSION(COMPONENT_TITLE, "0.1 beta 2", "Copyright (C) 2008 Dremora");
+DECLARE_COMPONENT_VERSION(COMPONENT_TITLE, COMPONENT_VERSION, "Copyright (C) 2008 Dremora");
 
-HWND GlobalMainWindowHandle;
-HWND GlobalSkypeAPIWindowHandle = 0;
-unsigned int GlobalSkypeControlAPIAttachMsg;
-unsigned int GlobalSkypeControlAPIDiscoverMsg;
-wchar_t WindowClassName[] = L"foobar2000_skype_class";
+static HWND GlobalMainWindowHandle;
+static HWND GlobalSkypeAPIWindowHandle = 0;
+static unsigned int GlobalSkypeControlAPIAttachMsg;
+static unsigned int GlobalSkypeControlAPIDiscoverMsg;
+static wchar_t WindowClassName[] = L"foobar2000_skype_class";
+
+static const GUID guid_skype_cfg_branch = { 0x9ae6ec18, 0xcb9c, 0x4998, { 0x9c, 0x86, 0x1f, 0xa9, 0x4d, 0xf3, 0xfe, 0xd1 } };
+static advconfig_branch_factory skype_cfg_branch(COMPONENT_TITLE, guid_skype_cfg_branch, advconfig_entry::guid_branch_display, 10);
+
+static const GUID guid_skype_cfg_playing = { 0x0e646745, 0x9062, 0x4775, { 0x87, 0x81, 0xcb, 0xfd, 0x38, 0x73, 0x67, 0x49 } };
+static advconfig_string_factory skype_cfg_playing("Playing", guid_skype_cfg_playing, guid_skype_cfg_branch, 1, "playing: [%artist% - ]%title%");
+
+static const GUID guid_skype_cfg_paused = { 0x79b6576b, 0x9dc0, 0x4866, { 0xb2, 0xaf, 0x21, 0xa, 0x89, 0xd6, 0x2c, 0x53 } };
+static advconfig_string_factory skype_cfg_paused("Paused", guid_skype_cfg_paused, guid_skype_cfg_branch, 2, "paused: [%artist% - ]%title%");
+
+static const GUID guid_skype_cfg_stopped = { 0x78ac024d, 0x32a3, 0x40b2, { 0x88, 0x66, 0x9b, 0x5b, 0x7b, 0x2a, 0x9f, 0xc3 } };
+static advconfig_string_factory skype_cfg_stopped("Stopped", guid_skype_cfg_stopped, guid_skype_cfg_branch, 3, COMPONENT_DLL_NAME " v" COMPONENT_VERSION);
+
+//static const GUID guid_skype_fb2k_not_started = { 0x6575e95f, 0x4e85, 0x46bf, { 0x81, 0xa3, 0xe6, 0xb1, 0x9e, 0x5f, 0x61, 0xc2 } };
+//static advconfig_string_factory skype_fb2k_not_started("foobar2000 is not started", guid_skype_fb2k_not_started, guid_skype_cfg_branch, 4, "foobar2000 is not started.");
 
 enum {
 	SKYPECONTROLAPI_ATTACH_SUCCESS,               // Client is successfully attached and API window handle can be found in wParam parameter
@@ -22,7 +35,7 @@ enum {
 	SKYPECONTROLAPI_ATTACH_API_AVAILABLE         = 0x8001
 };
 
-void skype_send(char *title) {
+void skype_send(const char *title) {
 	if (!GlobalSkypeAPIWindowHandle) return;
 	COPYDATASTRUCT CopyData;
 	CopyData.dwData = 0;
@@ -39,64 +52,60 @@ void skype_send(char *title) {
 
 void skype_stopped() { 
 	if (!GlobalSkypeAPIWindowHandle) return;
-	skype_send(STOPPED_TEXT);
+	service_ptr_t<advconfig_entry_string_impl> stop;
+	pfc::string8 str;
+	skype_cfg_stopped.get_static_instance().get_state(str);
+	skype_send(str);
 }
 
-void skype_now_playing() {
+void skype_playing() {
 	if (!GlobalSkypeAPIWindowHandle) return;
 	static_api_ptr_t<playback_control> pc;
 	static_api_ptr_t<titleformat_compiler> tc;
 	service_ptr_t<titleformat_object> script;
-	pfc::string8 text;
-	if (pc->is_paused()) tc->compile_safe(script, PAUSED_TEXT);
-	else tc->compile_safe(script, NOW_PLAYING_TEXT);
+	pfc::string8 str, text;
+	if (pc->is_paused()) skype_cfg_paused.get_static_instance().get_state(str);
+	else skype_cfg_playing.get_static_instance().get_state(str);
+	tc->compile_safe(script, str);
 	if (!pc->playback_format_title(0, text, script, 0, playback_control::display_level_titles)) {
 		skype_stopped();
 		return;
 	}
-	char *title = new char[text.get_length()+1];
-	strcpy_s(title, text.get_length()+1, text);
-	skype_send(title);
-	delete title;
+	skype_send(text);
 }
 
 void skype_connect() {
 	PostMessage(HWND_BROADCAST, GlobalSkypeControlAPIDiscoverMsg, (WPARAM)GlobalMainWindowHandle, 0);
 }
 static LRESULT __stdcall WindowProc(HWND hWindow, UINT uiMessage, WPARAM uiParam, LPARAM ulParam) {
-	switch (uiMessage) {
-		case WM_COPYDATA:
-			if (GlobalSkypeAPIWindowHandle == (HWND)uiParam) return 1;
-			break;
-		default:
-			if (uiMessage == GlobalSkypeControlAPIAttachMsg) {
-				switch (ulParam) {
-					case SKYPECONTROLAPI_ATTACH_SUCCESS:
-					{
-						GlobalSkypeAPIWindowHandle = (HWND)uiParam;
-						static_api_ptr_t<playback_control> pc;
-						if (pc->is_playing()) skype_now_playing();
-						else skype_stopped();
-						console::printf(COMPONENT_TITLE ": Connection successful.");
-						break;
-					}
-					case SKYPECONTROLAPI_ATTACH_PENDING_AUTHORIZATION:
-						console::printf(COMPONENT_TITLE ": Pending authorization.");
-						break;
-					case SKYPECONTROLAPI_ATTACH_REFUSED:
-						console::printf(COMPONENT_TITLE ": Connection refused.");
-						break;
-					case SKYPECONTROLAPI_ATTACH_NOT_AVAILABLE:
-						console::printf(COMPONENT_TITLE ": Skype API is not available, waiting.");
-						break;
-					case SKYPECONTROLAPI_ATTACH_API_AVAILABLE:
-						console::printf(COMPONENT_TITLE ": Skype API is now available.");
-						/*if (!GlobalSkypeAPIWindowHandle) */skype_connect();
-						break;
-				}
-				return 0;
-			} else return DefWindowProc(hWindow, uiMessage, uiParam, ulParam);
-	}
+	if (uiMessage == WM_COPYDATA && GlobalSkypeAPIWindowHandle == (HWND)uiParam) return 1;
+	else if (uiMessage == GlobalSkypeControlAPIAttachMsg) {
+		switch (ulParam) {
+			case SKYPECONTROLAPI_ATTACH_SUCCESS:
+			{
+				GlobalSkypeAPIWindowHandle = (HWND)uiParam;
+				static_api_ptr_t<playback_control> pc;
+				if (pc->is_playing()) skype_playing();
+				else skype_stopped();
+				console::printf(COMPONENT_TITLE ": Connection successful.");
+				break;
+			}
+			case SKYPECONTROLAPI_ATTACH_PENDING_AUTHORIZATION:
+				console::printf(COMPONENT_TITLE ": Pending authorization.");
+				break;
+			case SKYPECONTROLAPI_ATTACH_REFUSED:
+				console::printf(COMPONENT_TITLE ": Connection refused.");
+				break;
+			case SKYPECONTROLAPI_ATTACH_NOT_AVAILABLE:
+				console::printf(COMPONENT_TITLE ": Skype API is not available, waiting.");
+				break;
+			case SKYPECONTROLAPI_ATTACH_API_AVAILABLE:
+				console::printf(COMPONENT_TITLE ": Skype API is now available.");
+				/*if (!GlobalSkypeAPIWindowHandle) */skype_connect();
+				break;
+		}
+		return 0;
+	} else return DefWindowProc(hWindow, uiMessage, uiParam, ulParam);
 }
 
 class skype_initquit : public initquit {
@@ -112,7 +121,9 @@ class skype_initquit : public initquit {
 		skype_connect();
 	}
 	virtual void on_quit() {
-		skype_send(FB2K_NOT_STARTED);
+		//pfc::string8 str;
+		//skype_cfg_stopped.get_static_instance().get_state(str);
+		//skype_send(str);
 		UnregisterClass(WindowClassName, core_api::get_my_instance());
 	}
 };
@@ -120,10 +131,10 @@ class skype_initquit : public initquit {
 static initquit_factory_t<skype_initquit> foo_initquit;
 
 class skype_play_callback_static : public play_callback_static {
-	void on_playback_new_track(metadb_handle_ptr p_track) { skype_now_playing(); }
-	void on_playback_edited(metadb_handle_ptr p_track) { skype_now_playing(); }
-	void on_playback_dynamic_info_track(const file_info & p_info) { skype_now_playing(); }
-	void on_playback_pause(bool p_state) { skype_now_playing(); }
+	void on_playback_new_track(metadb_handle_ptr p_track) { skype_playing(); }
+	void on_playback_edited(metadb_handle_ptr p_track) { skype_playing(); }
+	void on_playback_dynamic_info_track(const file_info & p_info) { skype_playing(); }
+	void on_playback_pause(bool p_state) { skype_playing(); }
 	void on_playback_stop(play_control::t_stop_reason reason) { skype_stopped(); }
 
 	void on_playback_starting(play_control::t_track_command p_command,bool p_paused) {}
