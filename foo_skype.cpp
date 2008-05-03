@@ -2,7 +2,7 @@
 
 #define COMPONENT_TITLE "Skype playing notifications"
 #define COMPONENT_DLL_NAME "foo_skype"
-#define COMPONENT_VERSION "0.1 beta 2"
+#define COMPONENT_VERSION "0.1 beta 3"
 
 DECLARE_COMPONENT_VERSION(COMPONENT_TITLE, COMPONENT_VERSION, "Copyright (C) 2008 Dremora");
 
@@ -24,8 +24,8 @@ static advconfig_string_factory skype_cfg_paused("Paused", guid_skype_cfg_paused
 static const GUID guid_skype_cfg_stopped = { 0x78ac024d, 0x32a3, 0x40b2, { 0x88, 0x66, 0x9b, 0x5b, 0x7b, 0x2a, 0x9f, 0xc3 } };
 static advconfig_string_factory skype_cfg_stopped("Stopped", guid_skype_cfg_stopped, guid_skype_cfg_branch, 3, COMPONENT_DLL_NAME " v" COMPONENT_VERSION);
 
-//static const GUID guid_skype_fb2k_not_started = { 0x6575e95f, 0x4e85, 0x46bf, { 0x81, 0xa3, 0xe6, 0xb1, 0x9e, 0x5f, 0x61, 0xc2 } };
-//static advconfig_string_factory skype_fb2k_not_started("foobar2000 is not started", guid_skype_fb2k_not_started, guid_skype_cfg_branch, 4, "foobar2000 is not started.");
+static const GUID guid_skype_cfg_pauseoncall = { 0x6575e95f, 0x4e85, 0x46bf, { 0x81, 0xa3, 0xe6, 0xb1, 0x9e, 0x5f, 0x61, 0xc2 } };
+static advconfig_checkbox_factory_t<false> skype_cfg_pauseoncall("Pause on incoming Skype calls", guid_skype_cfg_pauseoncall, advconfig_entry::guid_branch_playback, 10, false);
 
 enum {
 	SKYPECONTROLAPI_ATTACH_SUCCESS,               // Client is successfully attached and API window handle can be found in wParam parameter
@@ -78,7 +78,13 @@ void skype_connect() {
 	PostMessage(HWND_BROADCAST, GlobalSkypeControlAPIDiscoverMsg, (WPARAM)GlobalMainWindowHandle, 0);
 }
 static LRESULT __stdcall WindowProc(HWND hWindow, UINT uiMessage, WPARAM uiParam, LPARAM ulParam) {
-	if (uiMessage == WM_COPYDATA && GlobalSkypeAPIWindowHandle == (HWND)uiParam) return 1;
+	if (uiMessage == WM_COPYDATA && GlobalSkypeAPIWindowHandle == (HWND)uiParam) {
+		if (skype_cfg_pauseoncall.get_static_instance().get_state() && *((int *)ulParam + 1) > 5 && !memcmp(*(char **)((char *)ulParam + 8), "CALL ", 5)) {
+				static_api_ptr_t<playback_control> pc;
+				pc->pause(true);
+		}
+		return 1;
+	}
 	else if (uiMessage == GlobalSkypeControlAPIAttachMsg) {
 		switch (ulParam) {
 			case SKYPECONTROLAPI_ATTACH_SUCCESS:
