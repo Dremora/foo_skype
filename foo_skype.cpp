@@ -1,4 +1,4 @@
-#include "../SDK/foobar2000.h"
+#include "../foobar2000/SDK/foobar2000.h"
 
 #define COMPONENT_TITLE "Skype playing notifications"
 #define COMPONENT_DLL_NAME "foo_skype"
