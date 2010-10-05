@@ -1,4 +1,4 @@
-#include "../foobar2000/SDK/foobar2000.h"
+#include "foo_skype.h"
 
 #define COMPONENT_TITLE "Skype playing notifications"
 #define COMPONENT_DLL_NAME "foo_skype"
@@ -39,13 +39,18 @@ void skype_connect() {
 	PostMessage(HWND_BROADCAST, GlobalSkypeControlAPIDiscoverMsg, (WPARAM)GlobalMainWindowHandle, 0);
 }
 
+bool skype_can_send()
+{
+	return GlobalSkypeAPIWindowHandle && foo_skype::Preferences::enabled;
+}
+
 void skype_disconnect() {
 	GlobalSkypeAPIWindowHandle = 0;
 	console::printf(COMPONENT_TITLE ": Disconnected.");
 }
 
 void skype_send(const char *title) {
-	if (!GlobalSkypeAPIWindowHandle) return;
+	if (!skype_can_send()) return;
 	COPYDATASTRUCT CopyData;
 	CopyData.dwData = 0;
 	CopyData.cbData = 23 + strlen(title);
@@ -57,14 +62,14 @@ void skype_send(const char *title) {
 }
 
 void skype_stopped() {
-	if (!GlobalSkypeAPIWindowHandle) return;
+	if (!skype_can_send()) return;
 	pfc::string8 str;
 	skype_cfg_stopped.get_static_instance().get_state(str);
 	skype_send(str);
 }
 
 void skype_playing() {
-	if (!GlobalSkypeAPIWindowHandle) return;
+	if (!skype_can_send()) return;
 	static_api_ptr_t<playback_control> pc;
 	service_ptr_t<titleformat_object> script;
 	pfc::string8 str, text;
