@@ -1,8 +1,6 @@
 #include "foo_skype.h"
 
-#define COMPONENT_TITLE "Skype playing notifications"
-#define COMPONENT_DLL_NAME "foo_skype"
-#define COMPONENT_VERSION "0.1"
+using namespace foo_skype;
 
 DECLARE_COMPONENT_VERSION(COMPONENT_TITLE, COMPONENT_VERSION, "Copyright (C) 2008 Dremora");
 
@@ -11,21 +9,6 @@ static HWND GlobalSkypeAPIWindowHandle = 0;
 static unsigned int GlobalSkypeControlAPIAttachMsg;
 static unsigned int GlobalSkypeControlAPIDiscoverMsg;
 static wchar_t WindowClassName[] = L"foobar2000_skype_class";
-
-static const GUID guid_skype_cfg_branch = { 0x9ae6ec18, 0xcb9c, 0x4998, { 0x9c, 0x86, 0x1f, 0xa9, 0x4d, 0xf3, 0xfe, 0xd1 } };
-static advconfig_branch_factory skype_cfg_branch(COMPONENT_TITLE, guid_skype_cfg_branch, advconfig_entry::guid_branch_display, 10);
-
-static const GUID guid_skype_cfg_playing = { 0x0e646745, 0x9062, 0x4775, { 0x87, 0x81, 0xcb, 0xfd, 0x38, 0x73, 0x67, 0x49 } };
-static advconfig_string_factory skype_cfg_playing("Playing", guid_skype_cfg_playing, guid_skype_cfg_branch, 1, "playing: [%artist% - ]%title%");
-
-static const GUID guid_skype_cfg_paused = { 0x79b6576b, 0x9dc0, 0x4866, { 0xb2, 0xaf, 0x21, 0xa, 0x89, 0xd6, 0x2c, 0x53 } };
-static advconfig_string_factory skype_cfg_paused("Paused", guid_skype_cfg_paused, guid_skype_cfg_branch, 2, "paused: [%artist% - ]%title%");
-
-static const GUID guid_skype_cfg_stopped = { 0x78ac024d, 0x32a3, 0x40b2, { 0x88, 0x66, 0x9b, 0x5b, 0x7b, 0x2a, 0x9f, 0xc3 } };
-static advconfig_string_factory skype_cfg_stopped("Stopped", guid_skype_cfg_stopped, guid_skype_cfg_branch, 3, COMPONENT_DLL_NAME);
-
-static const GUID guid_skype_cfg_pauseoncall = { 0x6575e95f, 0x4e85, 0x46bf, { 0x81, 0xa3, 0xe6, 0xb1, 0x9e, 0x5f, 0x61, 0xc2 } };
-static advconfig_checkbox_factory_t<false> skype_cfg_pauseoncall("Pause on incoming Skype calls", guid_skype_cfg_pauseoncall, advconfig_entry::guid_branch_playback, 10, false);
 
 enum {
 	SKYPECONTROLAPI_ATTACH_SUCCESS,               // Client is successfully attached and API window handle can be found in wParam parameter
@@ -64,7 +47,7 @@ void skype_send(const char *title) {
 void skype_stopped() {
 	if (!skype_can_send()) return;
 	pfc::string8 str;
-	skype_cfg_stopped.get_static_instance().get_state(str);
+	Preferences::stopped.get_static_instance().get_state(str);
 	skype_send(str);
 }
 
@@ -73,8 +56,8 @@ void skype_playing() {
 	static_api_ptr_t<playback_control> pc;
 	service_ptr_t<titleformat_object> script;
 	pfc::string8 str, text;
-	if (pc->is_paused()) skype_cfg_paused.get_static_instance().get_state(str);
-	else skype_cfg_playing.get_static_instance().get_state(str);
+	if (pc->is_paused()) Preferences::paused.get_static_instance().get_state(str);
+	else Preferences::playing.get_static_instance().get_state(str);
 	static_api_ptr_t<titleformat_compiler>()->compile_safe(script, str);
 	if (!pc->playback_format_title(0, text, script, 0, playback_control::display_level_titles)) {
 		skype_stopped();
@@ -85,7 +68,7 @@ void skype_playing() {
 
 static LRESULT __stdcall WindowProc(HWND hWindow, UINT uiMessage, WPARAM uiParam, LPARAM ulParam) {
 	if (uiMessage == WM_COPYDATA && GlobalSkypeAPIWindowHandle == (HWND)uiParam) {
-		if (skype_cfg_pauseoncall.get_static_instance().get_state() && *((int *)ulParam + 1) >= 22 && !memcmp(*(char **)((char *)ulParam + 8), "CALL ", 5)) {
+		if (Preferences::pause_on_call.get_static_instance().get_state() && *((int *)ulParam + 1) >= 22 && !memcmp(*(char **)((char *)ulParam + 8), "CALL ", 5)) {
 			int size = *((int *)ulParam + 1);
 			char *str = *((char **)((char *)ulParam + 8));
 			for (int i = 5; i < size; i++) {
