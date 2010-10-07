@@ -36,9 +36,9 @@ void skype_send(const char *title) {
 	if (!skype_can_send()) return;
 	COPYDATASTRUCT CopyData;
 	CopyData.dwData = 0;
-	CopyData.cbData = 23 + strlen(title);
+	CopyData.cbData = 28 + strlen(title);
 	CopyData.lpData = new char[CopyData.cbData];
-	strcpy_s((char *)CopyData.lpData, CopyData.cbData, "SET PROFILE MOOD_TEXT ");
+	strcpy_s((char *)CopyData.lpData, CopyData.cbData, "SET PROFILE RICH_MOOD_TEXT ");
 	strcat_s((char *)CopyData.lpData, CopyData.cbData, title);
 	if (!SendMessage(GlobalSkypeAPIWindowHandle, WM_COPYDATA, (WPARAM)GlobalMainWindowHandle, (LPARAM)&CopyData)) skype_disconnect();
 	delete CopyData.lpData;
