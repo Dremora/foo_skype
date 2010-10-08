@@ -94,10 +94,15 @@
     <ClCompile Include="foo_skype.cpp" />
     <ClCompile Include="Menu.cpp" />
     <ClCompile Include="Preferences.cpp" />
+    <ClCompile Include="PreferencesPage.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\foobar2000\foobar2000_component_client\foobar2000_component_client.vcxproj">
       <Project>{71ad2674-065b-48f5-b8b0-e1f9d3892081}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <ProjectReference Include="..\foobar2000\helpers\foobar2000_sdk_helpers.vcxproj">
+      <Project>{ee47764e-a202-4f85-a767-abdab4aff35f}</Project>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
     <ProjectReference Include="..\foobar2000\SDK\foobar2000_SDK.vcxproj">
@@ -112,6 +117,10 @@
   <ItemGroup>
     <ClInclude Include="foo_skype.h" />
     <ClInclude Include="Preferences.h" />
+    <ClInclude Include="resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="resource.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

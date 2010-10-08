@@ -46,9 +46,7 @@ void skype_send(const char *title) {
 
 void skype_stopped() {
 	if (!skype_can_send()) return;
-	pfc::string8 str;
-	Preferences::stopped.get_static_instance().get_state(str);
-	skype_send(str);
+	skype_send(Preferences::stopped);
 }
 
 void skype_playing() {
@@ -56,8 +54,8 @@ void skype_playing() {
 	static_api_ptr_t<playback_control> pc;
 	service_ptr_t<titleformat_object> script;
 	pfc::string8 str, text;
-	if (pc->is_paused()) Preferences::paused.get_static_instance().get_state(str);
-	else Preferences::playing.get_static_instance().get_state(str);
+	if (pc->is_paused()) str = Preferences::paused;
+	else str = Preferences::playing;
 	static_api_ptr_t<titleformat_compiler>()->compile_safe(script, str);
 	if (!pc->playback_format_title(0, text, script, 0, playback_control::display_level_titles)) {
 		skype_stopped();
@@ -68,7 +66,7 @@ void skype_playing() {
 
 static LRESULT __stdcall WindowProc(HWND hWindow, UINT uiMessage, WPARAM uiParam, LPARAM ulParam) {
 	if (uiMessage == WM_COPYDATA && GlobalSkypeAPIWindowHandle == (HWND)uiParam) {
-		if (Preferences::pause_on_call.get_static_instance().get_state() && *((int *)ulParam + 1) >= 22 && !memcmp(*(char **)((char *)ulParam + 8), "CALL ", 5)) {
+		if (Preferences::pause_on_call && *((int *)ulParam + 1) >= 22 && !memcmp(*(char **)((char *)ulParam + 8), "CALL ", 5)) {
 			int size = *((int *)ulParam + 1);
 			char *str = *((char **)((char *)ulParam + 8));
 			for (int i = 5; i < size; i++) {

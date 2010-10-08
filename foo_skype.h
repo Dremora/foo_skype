@@ -1,5 +1,9 @@
-#include "../foobar2000/SDK/foobar2000.h"
+#define _WIN32_WINNT 0x0501
 
+#include "../foobar2000/SDK/foobar2000.h"
+#include "../foobar2000/ATLHelpers/ATLHelpers.h"
+
+#include "resource.h"
 #include "Preferences.h"
 
 #define COMPONENT_TITLE "Skype playing notifications"
