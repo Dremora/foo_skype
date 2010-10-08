@@ -134,7 +134,7 @@ class skype_play_callback_static : public play_callback_static {
 	void on_playback_edited(metadb_handle_ptr p_track) { skype_playing(); }
 	void on_playback_dynamic_info_track(const file_info & p_info) { skype_playing(); }
 	void on_playback_pause(bool p_state) { skype_playing(); }
-	void on_playback_stop(play_control::t_stop_reason reason) { skype_stopped(); }
+	void on_playback_stop(play_control::t_stop_reason reason) { if (reason != playback_control::stop_reason_starting_another) skype_stopped(); }
 
 	void on_playback_starting(play_control::t_track_command p_command,bool p_paused) {}
 	void on_playback_seek(double p_time) {}
