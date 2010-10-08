@@ -108,6 +108,8 @@ static LRESULT __stdcall WindowProc(HWND hWindow, UINT uiMessage, WPARAM uiParam
 
 class skype_initquit : public initquit {
 	virtual void on_init() {
+		if (core_api::is_quiet_mode_enabled())
+			return;
 		GlobalSkypeControlAPIAttachMsg = RegisterWindowMessage(L"SkypeControlAPIAttach");
 		GlobalSkypeControlAPIDiscoverMsg = RegisterWindowMessage(L"SkypeControlAPIDiscover");
 		WNDCLASS WindowClass = {};
@@ -119,6 +121,8 @@ class skype_initquit : public initquit {
 		skype_connect();
 	}
 	virtual void on_quit() {
+		if (core_api::is_quiet_mode_enabled())
+			return;
 		UnregisterClass(WindowClassName, core_api::get_my_instance());
 	}
 };
