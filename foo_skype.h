@@ -1,5 +1,7 @@
 #define _WIN32_WINNT 0x0501
 
+#include <regex>
+
 #include "../foobar2000/SDK/foobar2000.h"
 #include "../foobar2000/ATLHelpers/ATLHelpers.h"
 

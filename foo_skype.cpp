@@ -9,6 +9,7 @@ static HWND GlobalSkypeAPIWindowHandle = 0;
 static unsigned int GlobalSkypeControlAPIAttachMsg;
 static unsigned int GlobalSkypeControlAPIDiscoverMsg;
 static wchar_t WindowClassName[] = L"foobar2000_skype_class";
+static bool was_playing_before_call = false;
 
 enum {
 	SKYPECONTROLAPI_ATTACH_SUCCESS,               // Client is successfully attached and API window handle can be found in wParam parameter
@@ -66,16 +67,29 @@ void skype_playing() {
 
 static LRESULT __stdcall WindowProc(HWND hWindow, UINT uiMessage, WPARAM uiParam, LPARAM ulParam) {
 	if (uiMessage == WM_COPYDATA && GlobalSkypeAPIWindowHandle == (HWND)uiParam) {
-		if (Preferences::pause_on_call && *((int *)ulParam + 1) >= 22 && !memcmp(*(char **)((char *)ulParam + 8), "CALL ", 5)) {
-			int size = *((int *)ulParam + 1);
-			char *str = *((char **)((char *)ulParam + 8));
-			for (int i = 5; i < size; i++) {
-				if (*(str+i) == ' ') {
-					if (!strcmp(str+i+1, "STATUS RINGING")) static_api_ptr_t<playback_control>()->pause(true);
-					break;
-				}
+		PCOPYDATASTRUCT data = (PCOPYDATASTRUCT)ulParam;
+		const char *str = (const char *)data->lpData;
+		if (Preferences::pause_on_call)
+		{
+			static std::regex call_ringing("^CALL.*STATUS RINGING$");
+			if (std::regex_search(str, call_ringing))
+			{
+				static_api_ptr_t<playback_control> pc;
+				was_playing_before_call = pc->is_playing() && !pc->is_paused();
+				pc->pause(true);
+				return 1;
 			}
-		} else if (!strcmp(*(char **)((char *)ulParam + 8), "USERSTATUS LOGGEDOUT")) skype_disconnect();
+			static std::regex call_stopped("^CALL.*STATUS (FINISHED|MISSED|REFUSED|BUSY)$");
+			if (was_playing_before_call && std::regex_search(str, call_stopped))
+			{
+				static_api_ptr_t<playback_control>()->pause(false);
+				return 1;
+			}
+		}
+		if (!strcmp(str, "USERSTATUS LOGGEDOUT"))
+		{
+			skype_disconnect();
+		}
 		return 1;
 	}
 	else if (uiMessage == GlobalSkypeControlAPIAttachMsg) {
